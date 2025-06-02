@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音声＋画像→MP4変換ツール</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -28,8 +27,7 @@
             padding: 40px;
             max-width: 500px;
             width: 100%;
-            box-shadow: 0 20px 40px rgba(255, 255, 255, 0.1);
-            border: 3px solid #000000;
+            box-shadow: 0 0 0 3px #000000;
         }
 
         h1 {
@@ -55,20 +53,10 @@
             cursor: pointer;
             transition: all 0.3s ease;
             position: relative;
-            overflow: hidden;
         }
 
         .upload-label:hover {
-            background: #000000;
-            color: #ffffff;
-        }
-
-        .upload-label:hover .upload-icon svg {
-            fill: #ffffff;
-        }
-
-        .upload-label:hover .upload-text {
-            color: #ffffff;
+            background: #f0f0f0;
         }
 
         .upload-label.has-file {
@@ -82,8 +70,8 @@
             text-decoration: line-through;
         }
 
-        .upload-label.has-file .upload-icon svg {
-            fill: #ffffff;
+        .upload-label.has-file .upload-icon {
+            filter: invert(1);
         }
 
         .upload-label.has-file .file-name {
@@ -95,15 +83,9 @@
         }
 
         .upload-icon {
+            font-size: 48px;
             margin-bottom: 10px;
             display: block;
-        }
-
-        .upload-icon svg {
-            width: 48px;
-            height: 48px;
-            fill: #000000;
-            transition: fill 0.3s ease;
         }
 
         .upload-text {
@@ -118,28 +100,7 @@
             margin-top: 10px;
             word-break: break-all;
             font-weight: 600;
-        }
-
-        .upload-progress {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: #000000;
-            transform: scaleX(0);
-            transform-origin: left;
-            transition: transform 0.3s ease;
-            border-radius: 0 0 8px 8px;
-        }
-
-        .preview-image {
-            max-width: 100%;
-            max-height: 200px;
-            margin-top: 15px;
-            border-radius: 8px;
-            border: 2px solid #000000;
-            filter: grayscale(100%);
+            min-height: 20px;
         }
 
         .success-check {
@@ -149,44 +110,40 @@
             font-size: 24px;
             font-weight: bold;
             display: none;
+            color: #ffffff;
         }
 
         .upload-label.has-file .success-check {
             display: block;
-            color: #ffffff;
         }
 
         .convert-button {
             width: 100%;
-            background: #000000;
-            color: #ffffff;
-            border: 2px solid #000000;
+            background: #ffffff;
+            color: #cccccc;
+            border: 2px solid #cccccc;
             padding: 15px 30px;
             border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
-            cursor: pointer;
+            cursor: not-allowed;
             transition: all 0.3s ease;
             position: relative;
-            overflow: hidden;
         }
 
-        .convert-button:hover:not(:disabled) {
+        .convert-button.ready {
+            background: #000000;
+            color: #ffffff;
+            border-color: #000000;
+            cursor: pointer;
+            animation: pulse 2s infinite;
+        }
+
+        .convert-button.ready:hover {
             background: #ffffff;
             color: #000000;
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-        }
-
-        .convert-button:disabled {
-            background: #ffffff;
-            color: #cccccc;
-            border-color: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .convert-button.ready {
-            animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
@@ -245,7 +202,6 @@
             background: #000000;
             width: 0%;
             transition: width 0.3s ease;
-            position: relative;
         }
 
         .progress-text {
@@ -269,7 +225,7 @@
         }
 
         .download-link {
-            display: block;
+            display: none;
             text-align: center;
             margin-top: 20px;
             color: #000000;
@@ -309,9 +265,8 @@
                 padding: 20px;
             }
 
-            .upload-icon svg {
-                width: 36px;
-                height: 36px;
+            .upload-icon {
+                font-size: 36px;
             }
         }
     </style>
@@ -323,14 +278,9 @@
         <div class="upload-section">
             <label class="upload-label" id="audioLabel">
                 <input type="file" class="upload-input" id="audioInput" accept="audio/mp3,audio/mpeg">
-                <span class="upload-icon">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                    </svg>
-                </span>
+                <span class="upload-icon">🎵</span>
                 <span class="upload-text">MP3ファイルを選択</span>
                 <div class="file-name" id="audioFileName"></div>
-                <div class="upload-progress" id="audioProgress"></div>
                 <span class="success-check">✓</span>
             </label>
         </div>
@@ -338,20 +288,14 @@
         <div class="upload-section">
             <label class="upload-label" id="imageLabel">
                 <input type="file" class="upload-input" id="imageInput" accept="image/*">
-                <span class="upload-icon">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                    </svg>
-                </span>
+                <span class="upload-icon">🖼️</span>
                 <span class="upload-text">画像ファイルを選択</span>
                 <div class="file-name" id="imageFileName"></div>
-                <img class="preview-image" id="imagePreview" style="display: none;">
-                <div class="upload-progress" id="imageProgress"></div>
                 <span class="success-check">✓</span>
             </label>
         </div>
 
-        <button class="convert-button" id="convertButton" disabled>
+        <button class="convert-button" id="convertButton">
             MP4に変換
         </button>
 
@@ -370,26 +314,21 @@
         </a>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg.min.js"></script>
     <script>
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ 
-            log: true,
-            corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
-        });
-
+        // グローバル変数
         let audioFile = null;
         let imageFile = null;
+        let ffmpeg = null;
         let isFFmpegLoaded = false;
 
+        // DOM要素の取得
         const audioInput = document.getElementById('audioInput');
         const imageInput = document.getElementById('imageInput');
         const audioLabel = document.getElementById('audioLabel');
         const imageLabel = document.getElementById('imageLabel');
         const audioFileName = document.getElementById('audioFileName');
         const imageFileName = document.getElementById('imageFileName');
-        const imagePreview = document.getElementById('imagePreview');
-        const audioProgress = document.getElementById('audioProgress');
-        const imageProgress = document.getElementById('imageProgress');
         const convertButton = document.getElementById('convertButton');
         const progressContainer = document.getElementById('progressContainer');
         const progressFill = document.getElementById('progressFill');
@@ -398,39 +337,40 @@
         const errorMessage = document.getElementById('errorMessage');
         const downloadLink = document.getElementById('downloadLink');
 
-        // プログレスバーを更新する関数
+        // FFmpegの初期化
+        async function initFFmpeg() {
+            if (typeof FFmpeg === 'undefined') {
+                errorMessage.textContent = 'FFmpegライブラリの読み込みに失敗しました。';
+                return;
+            }
+
+            const { createFFmpeg, fetchFile } = FFmpeg;
+            ffmpeg = createFFmpeg({ 
+                log: true,
+                corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
+            });
+
+            // グローバルにfetchFileを設定
+            window.fetchFile = fetchFile;
+        }
+
+        // プログレスバーを更新
         function updateProgress(percent) {
             progressFill.style.width = percent + '%';
             progressText.textContent = Math.round(percent) + '%';
         }
 
-        // ファイル読み込みのシミュレーション
-        function simulateFileUpload(progressBar, callback) {
-            let progress = 0;
-            progressBar.style.transform = 'scaleX(0)';
-            
-            const interval = setInterval(() => {
-                progress += 10;
-                progressBar.style.transform = `scaleX(${progress / 100})`;
-                
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    setTimeout(callback, 200);
-                }
-            }, 50);
-        }
-
-        // FFmpegの初期化
+        // FFmpegを読み込み
         async function loadFFmpeg() {
-            if (!isFFmpegLoaded) {
+            if (!isFFmpegLoaded && ffmpeg) {
                 statusMessage.textContent = 'エンコーダーを準備中...';
-                updateProgress(10);
                 try {
                     await ffmpeg.load();
                     isFFmpegLoaded = true;
                     statusMessage.textContent = '';
+                    console.log('FFmpeg loaded successfully');
                 } catch (error) {
-                    errorMessage.textContent = 'エンコーダーの読み込みに失敗しました。ページを再読み込みしてください。';
+                    errorMessage.textContent = 'エンコーダーの読み込みに失敗しました。';
                     console.error('FFmpeg load error:', error);
                 }
             }
@@ -440,58 +380,38 @@
         audioInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                simulateFileUpload(audioProgress, () => {
-                    audioFile = file;
-                    audioFileName.textContent = `✓ ${file.name}`;
-                    audioLabel.classList.add('has-file');
-                    checkIfReady();
-                });
+                audioFile = file;
+                audioFileName.textContent = `✓ ${file.name}`;
+                audioLabel.classList.add('has-file');
+                checkIfReady();
             }
         });
 
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                simulateFileUpload(imageProgress, () => {
-                    imageFile = file;
-                    imageFileName.textContent = `✓ ${file.name}`;
-                    imageLabel.classList.add('has-file');
-                    
-                    // 画像プレビュー
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        imagePreview.src = e.target.result;
-                        imagePreview.style.display = 'block';
-                    };
-                    reader.readAsDataURL(file);
-                    
-                    checkIfReady();
-                });
+                imageFile = file;
+                imageFileName.textContent = `✓ ${file.name}`;
+                imageLabel.classList.add('has-file');
+                checkIfReady();
             }
         });
 
         // 変換可能かチェック
         function checkIfReady() {
             if (audioFile && imageFile) {
-                convertButton.disabled = false;
                 convertButton.classList.add('ready');
                 convertButton.textContent = '✓ MP4に変換する';
             }
         }
 
-        // FFmpegの進捗を監視
-        ffmpeg.setProgress(({ ratio }) => {
-            const percent = ratio * 100;
-            if (percent >= 0 && percent <= 100) {
-                updateProgress(20 + (percent * 0.7)); // 20%から90%まで
-            }
-        });
-
         // 変換処理
         convertButton.addEventListener('click', async () => {
-            if (!audioFile || !imageFile) return;
+            if (!audioFile || !imageFile) {
+                errorMessage.textContent = 'ファイルを選択してください';
+                return;
+            }
 
-            convertButton.disabled = true;
             convertButton.classList.add('loading');
             convertButton.classList.remove('ready');
             progressContainer.style.display = 'block';
@@ -509,11 +429,16 @@
                 updateProgress(15);
 
                 // ファイルをFFmpegに書き込み
-                ffmpeg.FS('writeFile', 'audio.mp3', await fetchFile(audioFile));
-                ffmpeg.FS('writeFile', 'image.jpg', await fetchFile(imageFile));
+                ffmpeg.FS('writeFile', 'audio.mp3', await window.fetchFile(audioFile));
+                ffmpeg.FS('writeFile', 'image.jpg', await window.fetchFile(imageFile));
 
                 statusMessage.textContent = '動画を作成中...';
-                updateProgress(20);
+                updateProgress(30);
+
+                // 進捗を監視
+                ffmpeg.setProgress(({ ratio }) => {
+                    updateProgress(30 + (ratio * 60));
+                });
 
                 // MP4に変換
                 await ffmpeg.run(
@@ -556,10 +481,10 @@
                 errorMessage.textContent = 'エラーが発生しました: ' + error.message;
                 updateProgress(0);
             } finally {
-                convertButton.disabled = false;
                 convertButton.classList.remove('loading');
-                convertButton.textContent = '✓ MP4に変換する';
-                convertButton.classList.add('ready');
+                if (audioFile && imageFile) {
+                    convertButton.classList.add('ready');
+                }
                 setTimeout(() => {
                     progressContainer.style.display = 'none';
                     updateProgress(0);
@@ -567,9 +492,10 @@
             }
         });
 
-        // ページ読み込み時にFFmpegを準備
-        window.addEventListener('load', () => {
-            loadFFmpeg();
+        // ページ読み込み時の初期化
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initFFmpeg();
+            await loadFFmpeg();
         });
     </script>
 </body>
