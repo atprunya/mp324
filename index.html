@@ -388,34 +388,6 @@
             }
         }
 
-        // FFmpegの初期化
-        async function initializeFFmpeg() {
-            if (ffmpegLoaded) return true;
-            
-            try {
-                elements.loadingIndicator.style.display = 'block';
-                
-                // FFmpeg.wasmの新しいAPI
-                const { createFFmpeg, fetchFile } = FFmpeg;
-                ffmpeg = createFFmpeg({
-                    log: false,
-                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-                });
-                
-                await ffmpeg.load();
-                window.fetchFile = fetchFile;
-                ffmpegLoaded = true;
-                
-                elements.loadingIndicator.style.display = 'none';
-                console.log('FFmpeg loaded successfully');
-                return true;
-            } catch (error) {
-                console.error('FFmpeg initialization error:', error);
-                elements.loadingIndicator.style.display = 'none';
-                return false;
-            }
-        }
-
         // 変換処理
         elements.convertButton.addEventListener('click', async () => {
             if (!audioFile || !imageFile) {
@@ -427,24 +399,37 @@
             elements.convertButton.classList.remove('ready');
             elements.errorMessage.textContent = '';
             elements.downloadLink.style.display = 'none';
+            elements.progressContainer.style.display = 'block';
+            updateProgress(0);
 
             try {
-                // FFmpegを初期化
-                if (!ffmpegLoaded) {
-                    elements.statusMessage.textContent = 'エンコーダーを準備中...';
-                    const initialized = await initializeFFmpeg();
-                    if (!initialized) {
-                        throw new Error('FFmpegの初期化に失敗しました');
-                    }
+                // FFmpegを初期化（毎回新規作成）
+                elements.statusMessage.textContent = 'エンコーダーを準備中...（初回は時間がかかります）';
+                
+                if (typeof FFmpeg === 'undefined') {
+                    throw new Error('FFmpegライブラリが読み込まれていません');
                 }
 
-                elements.progressContainer.style.display = 'block';
-                updateProgress(0);
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                
+                // 新しいインスタンスを作成
+                ffmpeg = createFFmpeg({
+                    log: true,  // デバッグ用にログを有効化
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+                    mainName: 'main'
+                });
+
+                // FFmpegを読み込み
+                if (!ffmpeg.isLoaded()) {
+                    await ffmpeg.load();
+                }
+
+                updateProgress(10);
+                elements.statusMessage.textContent = 'ファイルを読み込み中...';
 
                 // ファイルを読み込み
-                elements.statusMessage.textContent = 'ファイルを読み込み中...';
-                const audioData = await window.fetchFile(audioFile);
-                const imageData = await window.fetchFile(imageFile);
+                const audioData = await fetchFile(audioFile);
+                const imageData = await fetchFile(imageFile);
                 updateProgress(20);
 
                 // FFmpegに書き込み
@@ -458,19 +443,19 @@
                 ffmpeg.setProgress(({ ratio }) => {
                     const progress = 30 + (ratio * 60);
                     updateProgress(progress);
+                    if (ratio > 0) {
+                        elements.statusMessage.textContent = `動画を作成中... ${Math.round(ratio * 100)}%`;
+                    }
                 });
 
-                // 変換実行
+                // 変換実行 - シンプルなコマンドから試す
                 await ffmpeg.run(
-                    '-loop', '1',
                     '-i', 'image.jpg',
                     '-i', 'audio.mp3',
                     '-c:v', 'libx264',
-                    '-tune', 'stillimage',
                     '-c:a', 'aac',
-                    '-b:a', '192k',
-                    '-pix_fmt', 'yuv420p',
                     '-shortest',
+                    '-pix_fmt', 'yuv420p',
                     'output.mp4'
                 );
 
@@ -490,19 +475,26 @@
                 elements.statusMessage.textContent = '変換が完了しました！';
 
                 // クリーンアップ
-                ffmpeg.FS('unlink', 'audio.mp3');
-                ffmpeg.FS('unlink', 'image.jpg');
-                ffmpeg.FS('unlink', 'output.mp4');
+                try {
+                    ffmpeg.FS('unlink', 'audio.mp3');
+                    ffmpeg.FS('unlink', 'image.jpg');
+                    ffmpeg.FS('unlink', 'output.mp4');
+                } catch (e) {
+                    // エラーは無視
+                }
 
             } catch (error) {
                 console.error('Conversion error:', error);
                 
+                // より詳細なエラーメッセージ
                 if (error.message.includes('SharedArrayBuffer')) {
-                    elements.errorMessage.textContent = 'お使いのブラウザでは動作しません。Chrome、Firefox、またはEdgeをお使いください。';
-                } else if (error.message.includes('初期化')) {
-                    elements.errorMessage.textContent = 'エンコーダーの初期化に失敗しました。ページを再読み込みしてください。';
+                    elements.errorMessage.textContent = 'ブラウザの設定により動作できません。Chromeの場合は、chrome://flags/#shared-array-buffer を有効にしてください。';
+                } else if (error.message.includes('Out of memory')) {
+                    elements.errorMessage.textContent = 'メモリ不足です。ファイルサイズを小さくしてください。';
+                } else if (error.message.includes('FFmpegライブラリ')) {
+                    elements.errorMessage.textContent = 'ライブラリの読み込みに失敗しました。インターネット接続を確認してください。';
                 } else {
-                    elements.errorMessage.textContent = 'エラーが発生しました。別のファイルでお試しください。';
+                    elements.errorMessage.textContent = `エラー: ${error.message}`;
                 }
             } finally {
                 elements.convertButton.classList.remove('loading');
@@ -519,10 +511,15 @@
             }
         });
 
-        // ページ読み込み時にFFmpegを事前初期化（オプション）
+        // デバッグ情報
         window.addEventListener('load', () => {
-            // バックグラウンドで初期化を試みる（エラーは無視）
-            initializeFFmpeg().catch(() => {});
+            console.log('FFmpeg library loaded:', typeof FFmpeg !== 'undefined');
+            
+            // ブラウザの互換性チェック
+            if (!crossOriginIsolated) {
+                console.warn('Cross-Origin Isolation is not enabled. FFmpeg.wasm may not work properly.');
+                elements.errorMessage.textContent = '注意: このページはローカルファイルまたは非HTTPSサーバーで実行されている可能性があります。';
+            }
         });
     </script>
 </body>
