@@ -321,6 +321,7 @@
         let imageFile = null;
         let ffmpeg = null;
         let isFFmpegLoaded = false;
+        let isInitializing = false;
 
         // DOM要素の取得
         const audioInput = document.getElementById('audioInput');
@@ -339,10 +340,14 @@
 
         // FFmpegの初期化
         async function initFFmpeg() {
+            if (isInitializing || isFFmpegLoaded) return;
+            
+            isInitializing = true;
+            
             try {
                 // FFmpegライブラリが読み込まれるまで待機
                 let attempts = 0;
-                while (typeof FFmpeg === 'undefined' && attempts < 50) {
+                while (typeof FFmpeg === 'undefined' && attempts < 30) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     attempts++;
                 }
@@ -363,13 +368,13 @@
                 // エラーメッセージをクリア
                 errorMessage.textContent = '';
                 
-                // FFmpegを事前に読み込む
-                await loadFFmpeg();
+                console.log('FFmpeg initialized');
+                isInitializing = false;
+                
             } catch (error) {
                 console.error('FFmpeg初期化エラー:', error);
-                errorMessage.textContent = 'エンコーダーの初期化中です。しばらくお待ちください...';
-                // 再試行
-                setTimeout(initFFmpeg, 2000);
+                isInitializing = false;
+                // エラーメッセージは表示しない（バックグラウンドで処理）
             }
         }
 
@@ -381,18 +386,16 @@
 
         // FFmpegを読み込み
         async function loadFFmpeg() {
-            if (!isFFmpegLoaded && ffmpeg) {
-                try {
-                    statusMessage.textContent = 'エンコーダーを準備中...';
-                    await ffmpeg.load();
-                    isFFmpegLoaded = true;
-                    statusMessage.textContent = '';
-                    errorMessage.textContent = '';
-                    console.log('FFmpeg loaded successfully');
-                } catch (error) {
-                    console.error('FFmpeg load error:', error);
-                    // エラーを一時的に表示せず、バックグラウンドで処理
-                }
+            if (!ffmpeg || isFFmpegLoaded) return;
+            
+            try {
+                await ffmpeg.load();
+                isFFmpegLoaded = true;
+                errorMessage.textContent = '';
+                console.log('FFmpeg loaded successfully');
+            } catch (error) {
+                console.error('FFmpeg load error:', error);
+                // エラーは表示せず、変換時に再試行
             }
         }
 
@@ -403,6 +406,7 @@
                 audioFile = file;
                 audioFileName.textContent = `✓ ${file.name}`;
                 audioLabel.classList.add('has-file');
+                errorMessage.textContent = ''; // エラーメッセージをクリア
                 checkIfReady();
             }
         });
@@ -413,6 +417,7 @@
                 imageFile = file;
                 imageFileName.textContent = `✓ ${file.name}`;
                 imageLabel.classList.add('has-file');
+                errorMessage.textContent = ''; // エラーメッセージをクリア
                 checkIfReady();
             }
         });
@@ -434,9 +439,25 @@
 
             // FFmpegが読み込まれていない場合は初期化を試みる
             if (!isFFmpegLoaded) {
-                errorMessage.textContent = 'エンコーダーを準備中です。もう一度お試しください。';
-                await initFFmpeg();
-                return;
+                convertButton.classList.add('loading');
+                statusMessage.textContent = 'エンコーダーを準備中...';
+                
+                if (!ffmpeg) {
+                    await initFFmpeg();
+                }
+                
+                if (ffmpeg) {
+                    await loadFFmpeg();
+                }
+                
+                if (!isFFmpegLoaded) {
+                    errorMessage.textContent = 'エンコーダーの準備ができていません。ページを再読み込みしてください。';
+                    convertButton.classList.remove('loading');
+                    statusMessage.textContent = '';
+                    return;
+                }
+                
+                statusMessage.textContent = '';
             }
 
             convertButton.classList.add('loading');
@@ -507,6 +528,7 @@
                 if (audioFile && imageFile) {
                     convertButton.classList.add('ready');
                 }
+                statusMessage.textContent = '';
                 setTimeout(() => {
                     progressContainer.style.display = 'none';
                     updateProgress(0);
@@ -514,12 +536,15 @@
             }
         });
 
-        // ページ読み込み時の初期化
+        // ページ読み込み時の初期化（バックグラウンドで静かに実行）
         window.addEventListener('load', async () => {
-            // 少し遅延してから初期化
+            // バックグラウンドで初期化（エラーメッセージは表示しない）
             setTimeout(async () => {
                 await initFFmpeg();
-            }, 500);
+                if (ffmpeg) {
+                    await loadFFmpeg();
+                }
+            }, 1000);
         });
     </script>
 </body>
