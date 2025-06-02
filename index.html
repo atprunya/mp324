@@ -393,26 +393,37 @@
             updateProgress(0);
 
             try {
+                // FFmpegが利用可能か確認
+                if (typeof FFmpeg === 'undefined') {
+                    throw new Error('FFmpegライブラリが読み込まれていません。ページを再読み込みしてください。');
+                }
+
                 // FFmpegを初期化（変換時に毎回初期化）
                 if (!ffmpeg || !ffmpeg.isLoaded()) {
-                    elements.statusMessage.textContent = 'エンコーダーを準備中...';
+                    elements.statusMessage.textContent = 'エンコーダーを準備中...（初回は少し時間がかかります）';
                     
                     const { createFFmpeg, fetchFile } = FFmpeg;
                     ffmpeg = createFFmpeg({
                         log: false,
-                        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js'
+                        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js',
+                        wasmPath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.wasm',
+                        workerPath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.worker.js'
                     });
                     
                     await ffmpeg.load();
                     window.fetchFile = fetchFile;
+                    console.log('FFmpeg loaded successfully');
                 }
 
                 elements.statusMessage.textContent = 'ファイルを読み込み中...';
                 updateProgress(15);
 
                 // ファイルをFFmpegに書き込み
-                ffmpeg.FS('writeFile', 'audio.mp3', await window.fetchFile(audioFile));
-                ffmpeg.FS('writeFile', 'image.jpg', await window.fetchFile(imageFile));
+                const audioData = await window.fetchFile(audioFile);
+                const imageData = await window.fetchFile(imageFile);
+                
+                ffmpeg.FS('writeFile', 'audio.mp3', audioData);
+                ffmpeg.FS('writeFile', 'image.jpg', imageData);
 
                 elements.statusMessage.textContent = '動画を作成中...';
                 updateProgress(30);
@@ -421,6 +432,9 @@
                 ffmpeg.setProgress(({ ratio }) => {
                     const progress = 30 + (ratio * 60);
                     updateProgress(progress);
+                    if (ratio > 0) {
+                        elements.statusMessage.textContent = `動画を作成中... ${Math.round(ratio * 100)}%`;
+                    }
                 });
 
                 // MP4に変換
@@ -465,18 +479,32 @@
 
             } catch (error) {
                 console.error('変換エラー:', error);
-                elements.errorMessage.textContent = 'エラーが発生しました。ファイル形式を確認してください。';
+                
+                // エラーメッセージを詳細に
+                if (error.message.includes('SharedArrayBuffer')) {
+                    elements.errorMessage.textContent = 'ブラウザのセキュリティ設定により動作できません。別のブラウザをお試しください。';
+                } else if (error.message.includes('FFmpegライブラリ')) {
+                    elements.errorMessage.textContent = error.message;
+                } else if (error.message.includes('memory')) {
+                    elements.errorMessage.textContent = 'メモリ不足です。ファイルサイズを小さくしてください。';
+                } else {
+                    elements.errorMessage.textContent = 'エラーが発生しました。ファイル形式を確認してください。';
+                }
+                
                 updateProgress(0);
             } finally {
                 elements.convertButton.classList.remove('loading');
                 if (audioFile && imageFile) {
                     elements.convertButton.classList.add('ready');
+                    elements.convertButton.textContent = '✓ MP4に変換する';
                 }
                 elements.statusMessage.textContent = '';
                 
                 setTimeout(() => {
-                    elements.progressContainer.style.display = 'none';
-                    updateProgress(0);
+                    if (elements.progressContainer.style.display !== 'none') {
+                        elements.progressContainer.style.display = 'none';
+                        updateProgress(0);
+                    }
                 }, 3000);
             }
         });
