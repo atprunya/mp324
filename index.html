@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音声＋画像→MP4変換ツール</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .upload-section {
+            margin-bottom: 25px;
+        }
+
+        .upload-label {
+            display: block;
+            background: #f7f8fa;
+            border: 2px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-label:hover {
+            border-color: #667eea;
+            background: #f3f4f6;
+        }
+
+        .upload-label.has-file {
+            border-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .upload-input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .upload-text {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .file-name {
+            color: #10b981;
+            font-size: 12px;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 200px;
+            margin-top: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .convert-button {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .convert-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .convert-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .convert-button.loading {
+            color: transparent;
+        }
+
+        .convert-button.loading::after {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            margin-left: -10px;
+            margin-top: -10px;
+            border: 2px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 2px solid #ffffff;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            margin-top: 20px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .status-message {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        .download-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .download-link:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .error-message {
+            color: #ef4444;
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            .upload-label {
+                padding: 20px;
+            }
+
+            .upload-icon {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 音声＋画像→MP4変換 🎬</h1>
+        
+        <div class="upload-section">
+            <label class="upload-label" id="audioLabel">
+                <input type="file" class="upload-input" id="audioInput" accept="audio/mp3,audio/mpeg">
+                <span class="upload-icon">🎵</span>
+                <span class="upload-text">MP3ファイルを選択</span>
+                <div class="file-name" id="audioFileName"></div>
+            </label>
+        </div>
+
+        <div class="upload-section">
+            <label class="upload-label" id="imageLabel">
+                <input type="file" class="upload-input" id="imageInput" accept="image/*">
+                <span class="upload-icon">🖼️</span>
+                <span class="upload-text">画像ファイルを選択</span>
+                <div class="file-name" id="imageFileName"></div>
+                <img class="preview-image" id="imagePreview" style="display: none;">
+            </label>
+        </div>
+
+        <button class="convert-button" id="convertButton" disabled>
+            MP4に変換
+        </button>
+
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="status-message" id="statusMessage"></div>
+        <div class="error-message" id="errorMessage"></div>
+
+        <a class="download-link" id="downloadLink" style="display: none;">
+            MP4をダウンロード
+        </a>
+    </div>
+
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ 
+            log: true,
+            corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
+        });
+
+        let audioFile = null;
+        let imageFile = null;
+        let isFFmpegLoaded = false;
+
+        const audioInput = document.getElementById('audioInput');
+        const imageInput = document.getElementById('imageInput');
+        const audioLabel = document.getElementById('audioLabel');
+        const imageLabel = document.getElementById('imageLabel');
+        const audioFileName = document.getElementById('audioFileName');
+        const imageFileName = document.getElementById('imageFileName');
+        const imagePreview = document.getElementById('imagePreview');
+        const convertButton = document.getElementById('convertButton');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+        const statusMessage = document.getElementById('statusMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const downloadLink = document.getElementById('downloadLink');
+
+        // FFmpegの初期化
+        async function loadFFmpeg() {
+            if (!isFFmpegLoaded) {
+                statusMessage.textContent = 'エンコーダーを準備中...';
+                try {
+                    await ffmpeg.load();
+                    isFFmpegLoaded = true;
+                    statusMessage.textContent = '';
+                } catch (error) {
+                    errorMessage.textContent = 'エンコーダーの読み込みに失敗しました。ページを再読み込みしてください。';
+                    console.error('FFmpeg load error:', error);
+                }
+            }
+        }
+
+        // ファイル選択時の処理
+        audioInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                audioFile = file;
+                audioFileName.textContent = file.name;
+                audioLabel.classList.add('has-file');
+                checkIfReady();
+            }
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                imageFile = file;
+                imageFileName.textContent = file.name;
+                imageLabel.classList.add('has-file');
+                
+                // 画像プレビュー
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+                
+                checkIfReady();
+            }
+        });
+
+        // 変換可能かチェック
+        function checkIfReady() {
+            if (audioFile && imageFile) {
+                convertButton.disabled = false;
+            }
+        }
+
+        // 変換処理
+        convertButton.addEventListener('click', async () => {
+            if (!audioFile || !imageFile) return;
+
+            convertButton.disabled = true;
+            convertButton.classList.add('loading');
+            progressBar.style.display = 'block';
+            errorMessage.textContent = '';
+            downloadLink.style.display = 'none';
+
+            try {
+                // FFmpegを読み込み
+                if (!isFFmpegLoaded) {
+                    await loadFFmpeg();
+                }
+
+                statusMessage.textContent = 'ファイルを読み込み中...';
+                progressFill.style.width = '20%';
+
+                // ファイルをFFmpegに書き込み
+                ffmpeg.FS('writeFile', 'audio.mp3', await fetchFile(audioFile));
+                ffmpeg.FS('writeFile', 'image.jpg', await fetchFile(imageFile));
+
+                statusMessage.textContent = '動画を作成中...';
+                progressFill.style.width = '50%';
+
+                // MP4に変換
+                // -loop 1: 画像をループ
+                // -i: 入力ファイル指定
+                // -c:v libx264: H.264でエンコード
+                // -tune stillimage: 静止画用の最適化
+                // -c:a aac: 音声をAACでエンコード
+                // -b:a 192k: 音声ビットレート
+                // -pix_fmt yuv420p: 互換性のあるピクセルフォーマット
+                // -shortest: 音声の長さに合わせる
+                await ffmpeg.run(
+                    '-loop', '1',
+                    '-i', 'image.jpg',
+                    '-i', 'audio.mp3',
+                    '-c:v', 'libx264',
+                    '-tune', 'stillimage',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-pix_fmt', 'yuv420p',
+                    '-shortest',
+                    'output.mp4'
+                );
+
+                statusMessage.textContent = '動画を準備中...';
+                progressFill.style.width = '80%';
+
+                // 結果を読み込み
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+
+                // ダウンロードリンクを作成
+                const blob = new Blob([data.buffer], { type: 'video/mp4' });
+                const url = URL.createObjectURL(blob);
+                
+                downloadLink.href = url;
+                downloadLink.download = 'output.mp4';
+                downloadLink.style.display = 'block';
+
+                statusMessage.textContent = '変換が完了しました！';
+                progressFill.style.width = '100%';
+
+                // クリーンアップ
+                ffmpeg.FS('unlink', 'audio.mp3');
+                ffmpeg.FS('unlink', 'image.jpg');
+                ffmpeg.FS('unlink', 'output.mp4');
+
+            } catch (error) {
+                console.error('変換エラー:', error);
+                errorMessage.textContent = 'エラーが発生しました: ' + error.message;
+            } finally {
+                convertButton.disabled = false;
+                convertButton.classList.remove('loading');
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                }, 2000);
+            }
+        });
+
+        // ページ読み込み時にFFmpegを準備
+        window.addEventListener('load', () => {
+            loadFFmpeg();
+        });
+    </script>
+</body>
+</html>
