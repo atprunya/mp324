@@ -253,6 +253,14 @@
             text-decoration: underline;
         }
 
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666666;
+        }
+
         @media (max-width: 480px) {
             .container {
                 padding: 25px;
@@ -309,21 +317,23 @@
 
         <div class="status-message" id="statusMessage"></div>
         <div class="error-message" id="errorMessage"></div>
+        <div class="loading-indicator" id="loadingIndicator">FFmpegを読み込み中...</div>
 
         <a class="download-link" id="downloadLink" style="display: none;">
             MP4をダウンロード
         </a>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.0/dist/umd/ffmpeg.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js"></script>
+    <!-- FFmpeg.wasm の最新版を使用 -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <script>
         // グローバル変数
         let audioFile = null;
         let imageFile = null;
         let ffmpeg = null;
+        let ffmpegLoaded = false;
 
-        // DOM要素の取得
+        // DOM要素
         const elements = {
             audioInput: document.getElementById('audioInput'),
             imageInput: document.getElementById('imageInput'),
@@ -337,16 +347,17 @@
             progressText: document.getElementById('progressText'),
             statusMessage: document.getElementById('statusMessage'),
             errorMessage: document.getElementById('errorMessage'),
-            downloadLink: document.getElementById('downloadLink')
+            downloadLink: document.getElementById('downloadLink'),
+            loadingIndicator: document.getElementById('loadingIndicator')
         };
 
-        // プログレスバーを更新
+        // プログレスバー更新
         function updateProgress(percent) {
             elements.progressFill.style.width = percent + '%';
             elements.progressText.textContent = Math.round(percent) + '%';
         }
 
-        // ファイル選択時の処理
+        // ファイル選択処理
         elements.audioInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
@@ -377,6 +388,34 @@
             }
         }
 
+        // FFmpegの初期化
+        async function initializeFFmpeg() {
+            if (ffmpegLoaded) return true;
+            
+            try {
+                elements.loadingIndicator.style.display = 'block';
+                
+                // FFmpeg.wasmの新しいAPI
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                ffmpeg = createFFmpeg({
+                    log: false,
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                });
+                
+                await ffmpeg.load();
+                window.fetchFile = fetchFile;
+                ffmpegLoaded = true;
+                
+                elements.loadingIndicator.style.display = 'none';
+                console.log('FFmpeg loaded successfully');
+                return true;
+            } catch (error) {
+                console.error('FFmpeg initialization error:', error);
+                elements.loadingIndicator.style.display = 'none';
+                return false;
+            }
+        }
+
         // 変換処理
         elements.convertButton.addEventListener('click', async () => {
             if (!audioFile || !imageFile) {
@@ -384,60 +423,44 @@
                 return;
             }
 
-            // ボタンを無効化
             elements.convertButton.classList.add('loading');
             elements.convertButton.classList.remove('ready');
-            elements.progressContainer.style.display = 'block';
             elements.errorMessage.textContent = '';
             elements.downloadLink.style.display = 'none';
-            updateProgress(0);
 
             try {
-                // FFmpegが利用可能か確認
-                if (typeof FFmpeg === 'undefined') {
-                    throw new Error('FFmpegライブラリが読み込まれていません。ページを再読み込みしてください。');
+                // FFmpegを初期化
+                if (!ffmpegLoaded) {
+                    elements.statusMessage.textContent = 'エンコーダーを準備中...';
+                    const initialized = await initializeFFmpeg();
+                    if (!initialized) {
+                        throw new Error('FFmpegの初期化に失敗しました');
+                    }
                 }
 
-                // FFmpegを初期化（変換時に毎回初期化）
-                if (!ffmpeg || !ffmpeg.isLoaded()) {
-                    elements.statusMessage.textContent = 'エンコーダーを準備中...（初回は少し時間がかかります）';
-                    
-                    const { createFFmpeg, fetchFile } = FFmpeg;
-                    ffmpeg = createFFmpeg({
-                        log: false,
-                        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js',
-                        wasmPath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.wasm',
-                        workerPath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.worker.js'
-                    });
-                    
-                    await ffmpeg.load();
-                    window.fetchFile = fetchFile;
-                    console.log('FFmpeg loaded successfully');
-                }
+                elements.progressContainer.style.display = 'block';
+                updateProgress(0);
 
+                // ファイルを読み込み
                 elements.statusMessage.textContent = 'ファイルを読み込み中...';
-                updateProgress(15);
-
-                // ファイルをFFmpegに書き込み
                 const audioData = await window.fetchFile(audioFile);
                 const imageData = await window.fetchFile(imageFile);
-                
+                updateProgress(20);
+
+                // FFmpegに書き込み
                 ffmpeg.FS('writeFile', 'audio.mp3', audioData);
                 ffmpeg.FS('writeFile', 'image.jpg', imageData);
-
-                elements.statusMessage.textContent = '動画を作成中...';
                 updateProgress(30);
 
-                // 進捗を監視
+                elements.statusMessage.textContent = '動画を作成中...';
+
+                // 進捗監視
                 ffmpeg.setProgress(({ ratio }) => {
                     const progress = 30 + (ratio * 60);
                     updateProgress(progress);
-                    if (ratio > 0) {
-                        elements.statusMessage.textContent = `動画を作成中... ${Math.round(ratio * 100)}%`;
-                    }
                 });
 
-                // MP4に変換
+                // 変換実行
                 await ffmpeg.run(
                     '-loop', '1',
                     '-i', 'image.jpg',
@@ -451,47 +474,36 @@
                     'output.mp4'
                 );
 
-                elements.statusMessage.textContent = '動画を準備中...';
                 updateProgress(95);
+                elements.statusMessage.textContent = '動画を準備中...';
 
-                // 結果を読み込み
+                // 出力ファイルを読み込み
                 const data = ffmpeg.FS('readFile', 'output.mp4');
-
-                // ダウンロードリンクを作成
                 const blob = new Blob([data.buffer], { type: 'video/mp4' });
                 const url = URL.createObjectURL(blob);
-                
+
                 elements.downloadLink.href = url;
                 elements.downloadLink.download = `output_${Date.now()}.mp4`;
                 elements.downloadLink.style.display = 'block';
 
-                elements.statusMessage.textContent = '変換が完了しました！';
                 updateProgress(100);
+                elements.statusMessage.textContent = '変換が完了しました！';
 
                 // クリーンアップ
-                try {
-                    ffmpeg.FS('unlink', 'audio.mp3');
-                    ffmpeg.FS('unlink', 'image.jpg');
-                    ffmpeg.FS('unlink', 'output.mp4');
-                } catch (e) {
-                    // クリーンアップエラーは無視
-                }
+                ffmpeg.FS('unlink', 'audio.mp3');
+                ffmpeg.FS('unlink', 'image.jpg');
+                ffmpeg.FS('unlink', 'output.mp4');
 
             } catch (error) {
-                console.error('変換エラー:', error);
+                console.error('Conversion error:', error);
                 
-                // エラーメッセージを詳細に
                 if (error.message.includes('SharedArrayBuffer')) {
-                    elements.errorMessage.textContent = 'ブラウザのセキュリティ設定により動作できません。別のブラウザをお試しください。';
-                } else if (error.message.includes('FFmpegライブラリ')) {
-                    elements.errorMessage.textContent = error.message;
-                } else if (error.message.includes('memory')) {
-                    elements.errorMessage.textContent = 'メモリ不足です。ファイルサイズを小さくしてください。';
+                    elements.errorMessage.textContent = 'お使いのブラウザでは動作しません。Chrome、Firefox、またはEdgeをお使いください。';
+                } else if (error.message.includes('初期化')) {
+                    elements.errorMessage.textContent = 'エンコーダーの初期化に失敗しました。ページを再読み込みしてください。';
                 } else {
-                    elements.errorMessage.textContent = 'エラーが発生しました。ファイル形式を確認してください。';
+                    elements.errorMessage.textContent = 'エラーが発生しました。別のファイルでお試しください。';
                 }
-                
-                updateProgress(0);
             } finally {
                 elements.convertButton.classList.remove('loading');
                 if (audioFile && imageFile) {
@@ -501,12 +513,16 @@
                 elements.statusMessage.textContent = '';
                 
                 setTimeout(() => {
-                    if (elements.progressContainer.style.display !== 'none') {
-                        elements.progressContainer.style.display = 'none';
-                        updateProgress(0);
-                    }
+                    elements.progressContainer.style.display = 'none';
+                    updateProgress(0);
                 }, 3000);
             }
+        });
+
+        // ページ読み込み時にFFmpegを事前初期化（オプション）
+        window.addEventListener('load', () => {
+            // バックグラウンドで初期化を試みる（エラーは無視）
+            initializeFFmpeg().catch(() => {});
         });
     </script>
 </body>
