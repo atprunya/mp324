@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mp3 2 mp4</title>
+    <title>音声＋画像→MP4変換ツール</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg.min.js"></script>
     <style>
         * {
@@ -71,8 +71,34 @@
         }
 
         .upload-label.has-file {
-            border: 2px solid #000000;
-            background: #ffffff;
+            border: 3px solid #000000;
+            background: #000000;
+            color: #ffffff;
+        }
+
+        .upload-label.has-file .upload-text {
+            color: #ffffff;
+            text-decoration: line-through;
+        }
+
+        .upload-label.has-file .upload-icon {
+            filter: invert(1) grayscale(100%);
+        }
+
+        .upload-label.has-file .file-name {
+            color: #ffffff;
+        }
+
+        .success-check {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            display: none;
+        }
+
+        .upload-label.has-file .success-check {
+            display: block;
         }
 
         .upload-input {
@@ -145,8 +171,26 @@
         }
 
         .convert-button:disabled {
-            opacity: 0.3;
+            background: #ffffff;
+            color: #cccccc;
+            border-color: #cccccc;
             cursor: not-allowed;
+        }
+
+        .convert-button.ready {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(0, 0, 0, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+            }
         }
 
         .convert-button.loading {
@@ -265,7 +309,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>mp3 to mp4</h1>
+        <h1>🎵 音声＋画像→MP4変換 🎬</h1>
         
         <div class="upload-section">
             <label class="upload-label" id="audioLabel">
@@ -274,6 +318,7 @@
                 <span class="upload-text">MP3ファイルを選択</span>
                 <div class="file-name" id="audioFileName"></div>
                 <div class="upload-progress" id="audioProgress"></div>
+                <span class="success-check">✓</span>
             </label>
         </div>
 
@@ -285,6 +330,7 @@
                 <div class="file-name" id="imageFileName"></div>
                 <img class="preview-image" id="imagePreview" style="display: none;">
                 <div class="upload-progress" id="imageProgress"></div>
+                <span class="success-check">✓</span>
             </label>
         </div>
 
@@ -379,7 +425,7 @@
             if (file) {
                 simulateFileUpload(audioProgress, () => {
                     audioFile = file;
-                    audioFileName.textContent = file.name;
+                    audioFileName.textContent = `✓ ${file.name}`;
                     audioLabel.classList.add('has-file');
                     checkIfReady();
                 });
@@ -391,7 +437,7 @@
             if (file) {
                 simulateFileUpload(imageProgress, () => {
                     imageFile = file;
-                    imageFileName.textContent = file.name;
+                    imageFileName.textContent = `✓ ${file.name}`;
                     imageLabel.classList.add('has-file');
                     
                     // 画像プレビュー
@@ -411,6 +457,8 @@
         function checkIfReady() {
             if (audioFile && imageFile) {
                 convertButton.disabled = false;
+                convertButton.classList.add('ready');
+                convertButton.textContent = '✓ MP4に変換する';
             }
         }
 
