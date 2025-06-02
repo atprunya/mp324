@@ -160,6 +160,7 @@
 
         .convert-button.loading {
             color: transparent;
+            pointer-events: none;
         }
 
         .convert-button.loading::after {
@@ -171,7 +172,7 @@
             left: 50%;
             margin-left: -10px;
             margin-top: -10px;
-            border: 2px solid #000000;
+            border: 2px solid #cccccc;
             border-radius: 50%;
             border-top: 2px solid #ffffff;
             animation: spin 1s linear infinite;
@@ -314,110 +315,56 @@
         </a>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.0/dist/umd/ffmpeg.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js"></script>
     <script>
         // グローバル変数
         let audioFile = null;
         let imageFile = null;
         let ffmpeg = null;
-        let isFFmpegLoaded = false;
-        let isInitializing = false;
 
         // DOM要素の取得
-        const audioInput = document.getElementById('audioInput');
-        const imageInput = document.getElementById('imageInput');
-        const audioLabel = document.getElementById('audioLabel');
-        const imageLabel = document.getElementById('imageLabel');
-        const audioFileName = document.getElementById('audioFileName');
-        const imageFileName = document.getElementById('imageFileName');
-        const convertButton = document.getElementById('convertButton');
-        const progressContainer = document.getElementById('progressContainer');
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-        const statusMessage = document.getElementById('statusMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        const downloadLink = document.getElementById('downloadLink');
-
-        // FFmpegの初期化
-        async function initFFmpeg() {
-            if (isInitializing || isFFmpegLoaded) return;
-            
-            isInitializing = true;
-            
-            try {
-                // FFmpegライブラリが読み込まれるまで待機
-                let attempts = 0;
-                while (typeof FFmpeg === 'undefined' && attempts < 30) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    attempts++;
-                }
-
-                if (typeof FFmpeg === 'undefined') {
-                    throw new Error('FFmpegライブラリが読み込めません');
-                }
-
-                const { createFFmpeg, fetchFile } = FFmpeg;
-                ffmpeg = createFFmpeg({ 
-                    log: false,
-                    corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
-                });
-
-                // グローバルにfetchFileを設定
-                window.fetchFile = fetchFile;
-                
-                // エラーメッセージをクリア
-                errorMessage.textContent = '';
-                
-                console.log('FFmpeg initialized');
-                isInitializing = false;
-                
-            } catch (error) {
-                console.error('FFmpeg初期化エラー:', error);
-                isInitializing = false;
-                // エラーメッセージは表示しない（バックグラウンドで処理）
-            }
-        }
+        const elements = {
+            audioInput: document.getElementById('audioInput'),
+            imageInput: document.getElementById('imageInput'),
+            audioLabel: document.getElementById('audioLabel'),
+            imageLabel: document.getElementById('imageLabel'),
+            audioFileName: document.getElementById('audioFileName'),
+            imageFileName: document.getElementById('imageFileName'),
+            convertButton: document.getElementById('convertButton'),
+            progressContainer: document.getElementById('progressContainer'),
+            progressFill: document.getElementById('progressFill'),
+            progressText: document.getElementById('progressText'),
+            statusMessage: document.getElementById('statusMessage'),
+            errorMessage: document.getElementById('errorMessage'),
+            downloadLink: document.getElementById('downloadLink')
+        };
 
         // プログレスバーを更新
         function updateProgress(percent) {
-            progressFill.style.width = percent + '%';
-            progressText.textContent = Math.round(percent) + '%';
-        }
-
-        // FFmpegを読み込み
-        async function loadFFmpeg() {
-            if (!ffmpeg || isFFmpegLoaded) return;
-            
-            try {
-                await ffmpeg.load();
-                isFFmpegLoaded = true;
-                errorMessage.textContent = '';
-                console.log('FFmpeg loaded successfully');
-            } catch (error) {
-                console.error('FFmpeg load error:', error);
-                // エラーは表示せず、変換時に再試行
-            }
+            elements.progressFill.style.width = percent + '%';
+            elements.progressText.textContent = Math.round(percent) + '%';
         }
 
         // ファイル選択時の処理
-        audioInput.addEventListener('change', (e) => {
+        elements.audioInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 audioFile = file;
-                audioFileName.textContent = `✓ ${file.name}`;
-                audioLabel.classList.add('has-file');
-                errorMessage.textContent = ''; // エラーメッセージをクリア
+                elements.audioFileName.textContent = `✓ ${file.name}`;
+                elements.audioLabel.classList.add('has-file');
+                elements.errorMessage.textContent = '';
                 checkIfReady();
             }
         });
 
-        imageInput.addEventListener('change', (e) => {
+        elements.imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
                 imageFile = file;
-                imageFileName.textContent = `✓ ${file.name}`;
-                imageLabel.classList.add('has-file');
-                errorMessage.textContent = ''; // エラーメッセージをクリア
+                elements.imageFileName.textContent = `✓ ${file.name}`;
+                elements.imageLabel.classList.add('has-file');
+                elements.errorMessage.textContent = '';
                 checkIfReady();
             }
         });
@@ -425,62 +372,55 @@
         // 変換可能かチェック
         function checkIfReady() {
             if (audioFile && imageFile) {
-                convertButton.classList.add('ready');
-                convertButton.textContent = '✓ MP4に変換する';
+                elements.convertButton.classList.add('ready');
+                elements.convertButton.textContent = '✓ MP4に変換する';
             }
         }
 
         // 変換処理
-        convertButton.addEventListener('click', async () => {
+        elements.convertButton.addEventListener('click', async () => {
             if (!audioFile || !imageFile) {
-                errorMessage.textContent = 'ファイルを選択してください';
+                elements.errorMessage.textContent = 'ファイルを選択してください';
                 return;
             }
 
-            // FFmpegが読み込まれていない場合は初期化を試みる
-            if (!isFFmpegLoaded) {
-                convertButton.classList.add('loading');
-                statusMessage.textContent = 'エンコーダーを準備中...';
-                
-                if (!ffmpeg) {
-                    await initFFmpeg();
-                }
-                
-                if (ffmpeg) {
-                    await loadFFmpeg();
-                }
-                
-                if (!isFFmpegLoaded) {
-                    errorMessage.textContent = 'エンコーダーの準備ができていません。ページを再読み込みしてください。';
-                    convertButton.classList.remove('loading');
-                    statusMessage.textContent = '';
-                    return;
-                }
-                
-                statusMessage.textContent = '';
-            }
-
-            convertButton.classList.add('loading');
-            convertButton.classList.remove('ready');
-            progressContainer.style.display = 'block';
-            errorMessage.textContent = '';
-            downloadLink.style.display = 'none';
+            // ボタンを無効化
+            elements.convertButton.classList.add('loading');
+            elements.convertButton.classList.remove('ready');
+            elements.progressContainer.style.display = 'block';
+            elements.errorMessage.textContent = '';
+            elements.downloadLink.style.display = 'none';
             updateProgress(0);
 
             try {
-                statusMessage.textContent = 'ファイルを読み込み中...';
+                // FFmpegを初期化（変換時に毎回初期化）
+                if (!ffmpeg || !ffmpeg.isLoaded()) {
+                    elements.statusMessage.textContent = 'エンコーダーを準備中...';
+                    
+                    const { createFFmpeg, fetchFile } = FFmpeg;
+                    ffmpeg = createFFmpeg({
+                        log: false,
+                        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.0/dist/umd/ffmpeg-core.js'
+                    });
+                    
+                    await ffmpeg.load();
+                    window.fetchFile = fetchFile;
+                }
+
+                elements.statusMessage.textContent = 'ファイルを読み込み中...';
                 updateProgress(15);
 
                 // ファイルをFFmpegに書き込み
                 ffmpeg.FS('writeFile', 'audio.mp3', await window.fetchFile(audioFile));
                 ffmpeg.FS('writeFile', 'image.jpg', await window.fetchFile(imageFile));
 
-                statusMessage.textContent = '動画を作成中...';
+                elements.statusMessage.textContent = '動画を作成中...';
                 updateProgress(30);
 
                 // 進捗を監視
                 ffmpeg.setProgress(({ ratio }) => {
-                    updateProgress(30 + (ratio * 60));
+                    const progress = 30 + (ratio * 60);
+                    updateProgress(progress);
                 });
 
                 // MP4に変換
@@ -497,7 +437,7 @@
                     'output.mp4'
                 );
 
-                statusMessage.textContent = '動画を準備中...';
+                elements.statusMessage.textContent = '動画を準備中...';
                 updateProgress(95);
 
                 // 結果を読み込み
@@ -507,44 +447,38 @@
                 const blob = new Blob([data.buffer], { type: 'video/mp4' });
                 const url = URL.createObjectURL(blob);
                 
-                downloadLink.href = url;
-                downloadLink.download = 'output.mp4';
-                downloadLink.style.display = 'block';
+                elements.downloadLink.href = url;
+                elements.downloadLink.download = `output_${Date.now()}.mp4`;
+                elements.downloadLink.style.display = 'block';
 
-                statusMessage.textContent = '変換が完了しました！';
+                elements.statusMessage.textContent = '変換が完了しました！';
                 updateProgress(100);
 
                 // クリーンアップ
-                ffmpeg.FS('unlink', 'audio.mp3');
-                ffmpeg.FS('unlink', 'image.jpg');
-                ffmpeg.FS('unlink', 'output.mp4');
+                try {
+                    ffmpeg.FS('unlink', 'audio.mp3');
+                    ffmpeg.FS('unlink', 'image.jpg');
+                    ffmpeg.FS('unlink', 'output.mp4');
+                } catch (e) {
+                    // クリーンアップエラーは無視
+                }
 
             } catch (error) {
                 console.error('変換エラー:', error);
-                errorMessage.textContent = 'エラーが発生しました: ' + error.message;
+                elements.errorMessage.textContent = 'エラーが発生しました。ファイル形式を確認してください。';
                 updateProgress(0);
             } finally {
-                convertButton.classList.remove('loading');
+                elements.convertButton.classList.remove('loading');
                 if (audioFile && imageFile) {
-                    convertButton.classList.add('ready');
+                    elements.convertButton.classList.add('ready');
                 }
-                statusMessage.textContent = '';
+                elements.statusMessage.textContent = '';
+                
                 setTimeout(() => {
-                    progressContainer.style.display = 'none';
+                    elements.progressContainer.style.display = 'none';
                     updateProgress(0);
                 }, 3000);
             }
-        });
-
-        // ページ読み込み時の初期化（バックグラウンドで静かに実行）
-        window.addEventListener('load', async () => {
-            // バックグラウンドで初期化（エラーメッセージは表示しない）
-            setTimeout(async () => {
-                await initFFmpeg();
-                if (ffmpeg) {
-                    await loadFFmpeg();
-                }
-            }, 1000);
         });
     </script>
 </body>
