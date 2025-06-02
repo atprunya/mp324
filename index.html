@@ -339,19 +339,38 @@
 
         // FFmpegの初期化
         async function initFFmpeg() {
-            if (typeof FFmpeg === 'undefined') {
-                errorMessage.textContent = 'FFmpegライブラリの読み込みに失敗しました。';
-                return;
+            try {
+                // FFmpegライブラリが読み込まれるまで待機
+                let attempts = 0;
+                while (typeof FFmpeg === 'undefined' && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+
+                if (typeof FFmpeg === 'undefined') {
+                    throw new Error('FFmpegライブラリが読み込めません');
+                }
+
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                ffmpeg = createFFmpeg({ 
+                    log: false,
+                    corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
+                });
+
+                // グローバルにfetchFileを設定
+                window.fetchFile = fetchFile;
+                
+                // エラーメッセージをクリア
+                errorMessage.textContent = '';
+                
+                // FFmpegを事前に読み込む
+                await loadFFmpeg();
+            } catch (error) {
+                console.error('FFmpeg初期化エラー:', error);
+                errorMessage.textContent = 'エンコーダーの初期化中です。しばらくお待ちください...';
+                // 再試行
+                setTimeout(initFFmpeg, 2000);
             }
-
-            const { createFFmpeg, fetchFile } = FFmpeg;
-            ffmpeg = createFFmpeg({ 
-                log: true,
-                corePath: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.12.10/ffmpeg-core.js'
-            });
-
-            // グローバルにfetchFileを設定
-            window.fetchFile = fetchFile;
         }
 
         // プログレスバーを更新
@@ -363,15 +382,16 @@
         // FFmpegを読み込み
         async function loadFFmpeg() {
             if (!isFFmpegLoaded && ffmpeg) {
-                statusMessage.textContent = 'エンコーダーを準備中...';
                 try {
+                    statusMessage.textContent = 'エンコーダーを準備中...';
                     await ffmpeg.load();
                     isFFmpegLoaded = true;
                     statusMessage.textContent = '';
+                    errorMessage.textContent = '';
                     console.log('FFmpeg loaded successfully');
                 } catch (error) {
-                    errorMessage.textContent = 'エンコーダーの読み込みに失敗しました。';
                     console.error('FFmpeg load error:', error);
+                    // エラーを一時的に表示せず、バックグラウンドで処理
                 }
             }
         }
@@ -412,6 +432,13 @@
                 return;
             }
 
+            // FFmpegが読み込まれていない場合は初期化を試みる
+            if (!isFFmpegLoaded) {
+                errorMessage.textContent = 'エンコーダーを準備中です。もう一度お試しください。';
+                await initFFmpeg();
+                return;
+            }
+
             convertButton.classList.add('loading');
             convertButton.classList.remove('ready');
             progressContainer.style.display = 'block';
@@ -420,11 +447,6 @@
             updateProgress(0);
 
             try {
-                // FFmpegを読み込み
-                if (!isFFmpegLoaded) {
-                    await loadFFmpeg();
-                }
-
                 statusMessage.textContent = 'ファイルを読み込み中...';
                 updateProgress(15);
 
@@ -493,9 +515,11 @@
         });
 
         // ページ読み込み時の初期化
-        window.addEventListener('DOMContentLoaded', async () => {
-            await initFFmpeg();
-            await loadFFmpeg();
+        window.addEventListener('load', async () => {
+            // 少し遅延してから初期化
+            setTimeout(async () => {
+                await initFFmpeg();
+            }, 500);
         });
     </script>
 </body>
